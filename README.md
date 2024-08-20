@@ -1,4 +1,4 @@
-# MSampNZ
+# MSampSF
 Package for generating sample designs based on a Balanced Acceptance Sampling (BAS) master sample for terrestrial monitoring in New Zealand.
 
 Includes functions to generate point samples within a given area and generate transects from points. Convenience functions are included which make it easy to view data in interactive webmaps.

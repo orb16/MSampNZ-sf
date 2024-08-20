@@ -1,4 +1,4 @@
-Package: MSampNZ_sf
+Package: MSampSF
 Title: New Zealand Master Sample
 Version: 2.0
 Date: 2020-11-05
@@ -10,6 +10,8 @@ RoxygenNote: 7.2.3
 Imports: raster,
     rgdal,
     sp,
+    sf,
+    terra,
     rgeos,
 	Rcpp
 LinkingTo: Rcpp
