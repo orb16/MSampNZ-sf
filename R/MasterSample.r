@@ -8,12 +8,10 @@
 #Step 3: Ouptut number of points required clipped for that region.
 #--------------------------------------------------------------------
 
-#' @import raster
+#' @import terra
+#' @import sf
 #' @import sp
-#' @import rgeos
 #' @import Rcpp
-#' @import rgdal
-#' @import raster
 NULL
 
 #' @export
@@ -80,8 +78,8 @@ systemCong <- function(L = c(1/4, 1/3), J = c(2,2), base = c(2,3))
 makeFrame <- function(base = c(2,3), J = c(2,2), bb)
 {
   B <- prod(base^J)
-  halt.grid <- raster(extent(as.matrix( bb )), nrow=base[2]^J[2], ncol=base[1]^J[1])
-  halt.grid <- rasterToPolygons(halt.grid)
+  halt.grid <- terra::rast(ext = extent(as.matrix( bb )), nrow=base[2]^J[2], ncol=base[1]^J[1])
+  halt.grid <- terra::as.polygons(halt.grid)
   return(halt.grid)
 }
 
@@ -91,6 +89,10 @@ makeFrame <- function(base = c(2,3), J = c(2,2), bb)
 #' @export
 shape2Frame <- function(shp, bb = NULL, base = c(2,3), J = c(2,2), projstring = NULL)
 {
+  bb <- st_bbox(shp)
+  # here asumes bb_sf is the output st_bbox(shp)
+  bb <- matrix(bb_sf[c(1, 3, 2, 4)], byrow = T, nrow = 2, dimnames = list(c("x", "y"), c("min", "max")))
+  
   if( !is.null( bb))
   {
     scale.bas <- bb[,2] - bb[,1]
@@ -98,13 +100,14 @@ shape2Frame <- function(shp, bb = NULL, base = c(2,3), J = c(2,2), projstring = 
   }else{ return("Define Bounding Box Please.")}
 
   if( is.null( projstring)) {
-	projstring <- getProj(island = "South")
+	projstring <- st_crs(2193)
 	cat("Assuming NZTM Projection\n")
 	}
-  if(proj4string(shp) != projstring) shp <- spTransform(shp, projstring)
+  if(st_crs(shp) != projstring) shp <- st_transform(shp, projstring)
 
   #Stretch bounding box to Halton Frame Size:
-  bb2 <- bbox(shp)
+  bb2 <- st_bbox(shp)
+  bb2 <- matrix(bb2[c(1, 3, 2, 4)], byrow = T, nrow = 2, dimnames = list(c("x", "y"), c("min", "max")))
   xy <- (bb2 - shift.bas)/scale.bas
   lx <- floor(xy[1,1] / (1/base[1]^J[1]))/(base[1]^J[1])
   ly <- floor(xy[2,1] / (1/base[2]^J[2]))/(base[2]^J[2])
@@ -114,9 +117,10 @@ shape2Frame <- function(shp, bb = NULL, base = c(2,3), J = c(2,2), projstring = 
   ny <- (uy-ly)*base[2]^J[2]
 
   bb.new <- data.frame(min = c(lx, ly), max = c(ux, uy), row.names = c("x","y"))
-  halt.frame <- raster(extent(as.matrix( bb.new*scale.bas + shift.bas )), nrow=ny, ncol=nx)
-  projection(halt.frame) <- projstring
-  halt.poly <- rasterToPolygons(halt.frame)
+  halt.frame <- rast(ext = ext(as.matrix( bb.new*scale.bas + shift.bas )), 
+                       nrow=ny, ncol=nx)
+  crs(halt.frame) <- projstring[["input"]]
+  halt.poly <- terra::as.polygons(halt.frame)
 }
 
 
@@ -139,9 +143,9 @@ where2Start <- function(J = c(1,1), seeds = c(0,0), bases = c(2,3), boxes = NULL
 getProj <- function(island = "South")
 {	#NZTM
   if(island != "AucklandIslands")
-	return("+proj=tmerc +lat_0=0 +lon_0=173 +k=0.9996 +x_0=1600000 +y_0=10000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs")
+	return(st_crs(2193))
 	#NZTM for Auckland Islands
-	return("+proj=tmerc +lat_0=0 +lon_0=166 +k=1 +x_0=3500000 +y_0=10000000 +ellps=GRS80 +units=m +no_defs")
+	return(st_crs(3788))
  }
 
 
@@ -186,7 +190,7 @@ masterSample <- function(island = "South", shp, N = 100, J = c(0,0)){
   base <- c(2,3)
   if(!island %in% c("South", "North","AucklandIslands")) return("Define the island please.")
   nztm <- getProj(island)
-  if(proj4string(shp) != nztm) shp <- spTransform(shp, nztm)
+  if(st_crs(shp) != nztm) shp <- st_transform(shp, nztm)
   
   bb <- getBB(island)
   seed <- getSeed(island)
@@ -200,21 +204,27 @@ masterSample <- function(island = "South", shp, N = 100, J = c(0,0)){
   draw <- N + 5000
   
   hal.frame <- shape2Frame(shp, J = J, bb = bb, projstring = nztm)
-  area.shp <- sum(raster::area(shp))
-  while(area.shp < 0.25*raster::area(hal.frame)[1])	# Subset again:
+  area.shp <- sum(st_area(shp))
+  while(area.shp < 0.25*st_area(st_as_sf(hal.frame))[1])	# Subset again:
   {
 	if(base[2]^J[2] > base[1]^J[1]){ 
 		J[1] <- J[1] + 1
 	}else{
 		J[2] <- J[2] + 1
 	}
-	hal.frame <- shape2Frame(shp, J = J, bb = bb, projstring = nztm)	
+	hal.frame <- st_as_sf(shape2Frame(shp, J = J, 
+	                         bb = st_bbox(st_as_sf(data.frame(t(bb)), coords = c("x", "y"), crs = nztm)), 
+	                         projstring = nztm) )
+	
+	
   }
 	
-	boxes <- which(rowSums(gIntersects(shp, hal.frame, byid = TRUE)) > 0)
-	hal.polys <- hal.frame[boxes,]@polygons
+  # uptohere
+	boxes <- which(rowSums(st_intersects(shp, hal.frame, byid = TRUE, sparse = FALSE)) > 0)
+	hal.polys <- hal.frame[boxes,]
 	# Find the corner Halton Pts
-	box.lower <- do.call("rbind", lapply(hal.polys, FUN = function(x){data.frame(t(x@labpt))}))
+	box.lower <- st_coordinates(st_centroid(hal.polys))#do.call("rbind", lapply(hal.polys, FUN = function(x){data.frame(t(x@labpt))}))
+	# not sure if this will work
 	box.lower <- t(apply(box.lower, 1, FUN = function(x){(x - shift.bas)/scale.bas}))
 	A <- GetBoxIndices(box.lower, base, J)
 	halt.rep <- SolveCongruence(A, base, J)	
@@ -228,8 +238,13 @@ masterSample <- function(island = "South", shp, N = 100, J = c(0,0)){
     pts <- RSHalton(n = draw, seeds = seedshift, bases = c(2,3), boxes = halt.rep, J = J)
     pts[,2] <- pts[,2]*scale.bas[1] + shift.bas[1]
     pts[,3] <- pts[,3]*scale.bas[2] + shift.bas[2]
-    pts.coord <- SpatialPointsDataFrame(cbind(pts[,2],pts[,3]),proj4string=CRS(nztm), data.frame(SiteID = paste0(island, pts[,1] + endPoint), Count = pts[,1] + endPoint))
-    indx <- gIntersects(shp, pts.coord, byid = TRUE)
+    
+    pts.coord <- st_as_sf(data.frame(cbind(pts[,2],pts[,3]),
+                                     data.frame(SiteID = paste0(island, pts[,1] + endPoint), Count = pts[,1] + endPoint)),
+                                        crs=  nztm,
+                          coords = c(1,2))
+    indx <- st_intersects(shp, pts.coord, byid = TRUE, 
+                          sparse = FALSE)
     pts.coord <- pts.coord[rowSums(indx) > 0,]
     return(pts.coord)
   }
@@ -242,7 +257,7 @@ masterSample <- function(island = "South", shp, N = 100, J = c(0,0)){
 
   di <- 1
   while(nrow(pts.sample) < N){
-    last.pt <- pts.sample@data$Count[nrow(pts.sample)]
+    last.pt <- pts.sample$Count[nrow(pts.sample)]
     new.pts <- getSample(k = di, endPoint = last.pt)
     if(nrow(new.pts) > 0) pts.sample <- rbind(pts.sample, new.pts)
     di <- di + 1
@@ -257,7 +272,8 @@ masterSample <- function(island = "South", shp, N = 100, J = c(0,0)){
 #' @name point2Frame
 #' @title Make a halton frame around a BAS point
 #' @export
-point2Frame <- function(pt, bb = NULL, base = c(2,3), J = c(2,2), projstring = NULL)
+point2Frame <- function(pt, bb = st_bbox(st_as_sf(data.frame(t(bb)), coords = c("x", "y"), crs = nztm)), base = c(2,3), J = c(2,2), 
+                        projstring = NULL)
 {
   if(!is.null(bb))
   {
@@ -265,7 +281,7 @@ point2Frame <- function(pt, bb = NULL, base = c(2,3), J = c(2,2), projstring = N
     shift.bas <- bb[,1]
   }else{ return("Define Bounding Box Please.")}
 
-  if(is.null(projstring)) projstring <- proj4string(pt)
+  if(is.null(projstring)) projstring <- st_crs(pt)
 
   xy <- coordinates(pt)
   xy <- (xy - shift.bas)/scale.bas
@@ -274,9 +290,16 @@ point2Frame <- function(pt, bb = NULL, base = c(2,3), J = c(2,2), projstring = N
   frame.order <- systemCong(c(lx, ly), base = base, J = J)
   lx <- lx*scale.bas[1] + shift.bas[1]
   ly <- ly*scale.bas[2] + shift.bas[2]
-  framei <- Polygons(list(Polygon(cbind(c(lx,lx,lx + scale.bas[1]/base[1]^J[1], lx + scale.bas[1]/base[1]^J[1],lx), c(ly,ly + scale.bas[2]/base[2]^J[2],ly + scale.bas[2]/base[2]^J[2], ly, ly)))),
+  framei <- Polygons(list(Polygon(cbind(c(lx,lx,lx + scale.bas[1]/base[1]^J[1], 
+                                          lx + scale.bas[1]/base[1]^J[1],lx), 
+                                        c(ly,ly + scale.bas[2]/base[2]^J[2],
+                                          ly + scale.bas[2]/base[2]^J[2], ly, ly)))),
                      ID = frame.order)
-  framei <- SpatialPolygonsDataFrame(SpatialPolygons(list(framei), proj4string = CRS(projstring)), data = data.frame(Order = frame.order, row.names = frame.order))
+  framei <- SpatialPolygonsDataFrame(SpatialPolygons(list(framei), 
+                                                     proj4string = CRS(projstring)), 
+                                     data = data.frame(Order = frame.order, 
+                                                       row.names = frame.order))
+  framei <- st_as_sf(framei)
   return(framei)
 }
 

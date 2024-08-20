@@ -6,7 +6,7 @@ Author: Paul van Dam-Bates
 Maintainer: Ollie Gansell <ogansell@doc.govt.nz>
 Description: Selects Master Sample Points for NZ.
 License: GPL (>= 2)
-RoxygenNote: 7.1.1
+RoxygenNote: 7.2.3
 Imports: raster,
     rgdal,
     sp,
@@ -17,4 +17,3 @@ LazyData: true
 NeedsCompilation: yes
 Archs: i386, x64
 Encoding: UTF-8
-
