@@ -78,7 +78,7 @@ systemCong <- function(L = c(1/4, 1/3), J = c(2,2), base = c(2,3))
 makeFrame <- function(base = c(2,3), J = c(2,2), bb)
 {
   B <- prod(base^J)
-  halt.grid <- terra::rast(ext = extent(as.matrix( bb )), nrow=base[2]^J[2], ncol=base[1]^J[1])
+  halt.grid <- terra::rast(extent = ext(as.matrix( bb)), nrow=base[2]^J[2], ncol=base[1]^J[1])
   halt.grid <- terra::as.polygons(halt.grid)
   return(halt.grid)
 }
@@ -226,7 +226,7 @@ masterSample <- function(island = "South", shp, N = 100, J = c(0,0)){
 	box.lower <- st_coordinates(st_centroid(hal.polys))#do.call("rbind", lapply(hal.polys, FUN = function(x){data.frame(t(x@labpt))}))
 	# not sure if this will work
 	box.lower <- t(apply(box.lower, 1, FUN = function(x){(x - shift.bas)/scale.bas}))
-	A <- GetBoxIndices(box.lower, base, J)
+	A <- MSampSF:::GetBoxIndices(box.lower, base, J)
 	halt.rep <- SolveCongruence(A, base, J)	
 	B <- prod(c(2,3)^J)
 

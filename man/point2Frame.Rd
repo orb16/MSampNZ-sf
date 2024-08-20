@@ -4,7 +4,13 @@
 \alias{point2Frame}
 \title{Make a halton frame around a BAS point}
 \usage{
-point2Frame(pt, bb = NULL, base = c(2, 3), J = c(2, 2), projstring = NULL)
+point2Frame(
+  pt,
+  bb = st_bbox(st_as_sf(data.frame(t(bb)), coords = c("x", "y"), crs = nztm)),
+  base = c(2, 3),
+  J = c(2, 2),
+  projstring = NULL
+)
 }
 \description{
 Make a halton frame around a BAS point
